@@ -1,184 +1,65 @@
-import json
+from datetime import date
 
-import falcon
+import peewee
 
-PERSONS = [
-    {'id': '1', 'name': 'Bob', 'hobbies': []},
-    {'id': '2', 'name': 'Larry', 'hobbies': []},
-    {'id': '3', 'name': 'Kate', 'hobbies': []},
-    {'id': '4', 'name': 'Clara', 'hobbies': []},
-    {'id': '5', 'name': 'Sam', 'hobbies': []},
-]
+db = peewee.SqliteDatabase('database.db')
 
 
-class PersonBase:
-    def get_persons(self):
-        return PERSONS
+class Author(peewee.Model):
+    first_name = peewee.CharField()
+    last_name = peewee.CharField()
+    age = peewee.IntegerField(default=0)
 
-    def get_person(self, id):
-        persons = self.get_persons()
-        for person in persons:
-            if person['id'] == id:
-                return person
-
-        return None
-
-    def create_person(self, data):
-        PERSONS.append(data)
-        return data
-
-    def update_person(self, person, data):
-        if 'name' in data:
-            person['name'] = data['name']
-
-        return person
-
-    def delete_person(self, id):
-        persons = self.get_persons()
-        global PERSONS
-        PERSONS = [p for p in persons if p['id'] != id]
-
-        return True
+    class Meta:
+        database = db
 
 
-class HobbyBase:
-    def get_hobbies(self, person):
-        return person['hobbies']
+class Publisher(peewee.Model):
+    name = peewee.CharField()
 
-    def has_hobby(self, person, id):
-        hobbies = self.get_hobbies(person)
-        return bool([h for h in hobbies if h['id'] == id])
-
-    def create_hobby(self, person, data):
-        hobbies = self.get_hobbies(person)
-        hobbies.append(data)
-
-        return hobbies
-
-    def delete_hobby(self, person, id):
-        hobbies = self.get_hobbies(person)
-        person['hobbies'] = [h for h in hobbies if h['id'] != id]
-
-        return True
+    class Meta:
+        database = db
 
 
-class PersonResource(PersonBase):
-    def on_get(self, request, response):
-        persons = self.get_persons()
+class Book(peewee.Model):
+    title = peewee.CharField()
+    published_at = peewee.DateField()
+    author = peewee.ForeignKeyField(Author, backref='books')
+    publisher = peewee.ForeignKeyField(Publisher, backref='books', null=True)
 
-        response.body = json.dumps(persons)
+    class Meta:
+        database = db
 
-    def on_post(self, request, response):
-        body = json.loads(request.stream.read())
-
-        data = {
-            'id': body.get('id'),
-            'name': body.get('name'),
-        }
-
-        if not data['id'] or not data['name']:
-            raise falcon.HTTPBadRequest('Missing id or name')
-
-        if self.get_person(data['id']):
-            raise falcon.HTTPBadRequest('Person with given ID already exist')
-
-        person = self.create_person(data)
-
-        response.body = json.dumps({
-            'url': '/persons/{}/'.format(person['id']),
-        })
+    def __str__(self):
+        return self.title
 
 
-class PersonDetailResource(PersonBase):
-    def on_get(self, request, response, person_id):
-        person = self.get_person(person_id)
-
-        if not person:
-            raise falcon.HTTPNotFound()
-
-        response.body = json.dumps(person)
-
-    def on_patch(self, request, response, person_id):
-        body = json.loads(request.stream.read())
-        person = self.get_person(person_id)
-
-        if not person:
-            raise falcon.HTTPNotFound()
-
-        person = self.update_person(person, body)
-
-        response.body = json.dumps({
-            'url': '/persons/{}/'.format(person['id']),
-        })
-
-    def on_delete(self, request, response, person_id):
-        person = self.get_person(person_id)
-
-        if not person:
-            raise falcon.HTTPNotFound()
-
-        self.delete_person(person['id'])
-
-        response.body = json.dumps({
-            'deleted': True,
-        })
+db.drop_tables([Author, Publisher, Book])
+db.create_tables([Author, Publisher, Book])
 
 
-class PersonHobbyResource(PersonBase, HobbyBase):
-    def on_get(self, request, response, person_id):
-        person = self.get_person(person_id)
+Author.create(first_name='Bob', last_name='Kowalski', age=20)
+Author.create(first_name='Sam', last_name='Nowak', age=60)
+Author.create(first_name='Clara', last_name='Smith')
 
-        if not person:
-            raise falcon.HTTPNotFound()
+authors = Author.select()
+for author in authors:
+    print(author.id, author.first_name, author.last_name, author.age)
 
-        response.body = json.dumps(self.get_hobbies(person))
+publisher = Publisher.create(name='swiat ksiazki')
 
-    def on_post(self, request, response, person_id):
-        body = json.loads(request.stream.read())
+Book.create(
+    title='W pustyni i w puszczy',
+    published_at=date(1980, 4, 20),
+    author=authors[1],
+    publisher=publisher,
+)
 
-        person = self.get_person(person_id)
-        if not person:
-            raise falcon.HTTPNotFound()
+Book.create(
+    title='Janko Muzykant',
+    published_at=date(2025, 1, 1),
+    author=authors[1],
+)
 
-        data = {
-            'id': body.get('id'),
-            'name': body.get('name'),
-        }
-
-        if not data['id'] or not data['name']:
-            raise falcon.HTTPBadRequest('Missing id or name')
-
-        if self.has_hobby(person, data['id']):
-            raise falcon.HTTPBadRequest('Hobby already exist')
-
-        self.create_hobby(person, data)
-
-        response.body = json.dumps({
-            'url': '/persons/{}/hobbies/'.format(person['id']),
-        })
-
-
-class PersonHobbyDetailResource(PersonBase, HobbyBase):
-    def on_delete(self, request, response, person_id, hobby_id):
-        person = self.get_person(person_id)
-
-        if not person or not self.has_hobby(person, hobby_id):
-            raise falcon.HTTPNotFound()
-
-        self.delete_hobby(person, hobby_id)
-
-        response.body = json.dumps({
-            'deleted': True,
-        })
-
-
-person_resource = PersonResource()
-person_detail_resource = PersonDetailResource()
-person_hobby_resource = PersonHobbyResource()
-person_hobby_detail_resource = PersonHobbyDetailResource()
-
-api = falcon.API()
-api.add_route('/persons', person_resource)
-api.add_route('/persons/{person_id}', person_detail_resource)
-api.add_route('/persons/{person_id}/hobbies', person_hobby_resource)
-api.add_route('/persons/{person_id}/hobbies/{hobby_id}', person_hobby_detail_resource)
+for book in authors[1].books:
+    print(book)
