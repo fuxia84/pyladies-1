@@ -63,3 +63,11 @@ Book.create(
 
 for book in authors[1].books:
     print(book)
+
+
+sample_books = Book.select().join(Author).where(
+    Book.author.first_name == 'Sam'
+).order_by(Book.published_at.asc())
+
+for book in sample_books:
+    print(book, book.published_at)
