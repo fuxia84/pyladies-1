@@ -1,0 +1,14 @@
+<h1>Detal filmu:</h1>
+
+<h3>
+    {{ movie.title }}
+</h3>
+
+Gatunek: {{ movie.genre }} <br/>
+Rok produkcji: {{ movie.year }} <br/>
+
+<ul>
+    {% for actor in movie.actors.all %}
+        <li>{{ actor.actor }}</li>
+    {% endfor %}
+</ul>

@@ -1,0 +1,16 @@
+<h1>Lista filmów:</h1>
+
+<ul>
+    {% for movie in movies %}
+        <li class="movie-item">
+            <a href="{{ movie.get_absolute_url }}">
+                {{ movie.title }}
+            </a>
+
+            <br/>
+            {{ movie.genre }}
+            <br/>
+            {{ movie.year }}
+        </li>
+    {% endfor %}
+</ul>
